@@ -1,4 +1,4 @@
-#include "../include/common.h"
+#include "../include/comum.h"
 #include "../include/Mensagens.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
 
 void usage(int argc, char **argv){
     printf("usage: %s <server IP> <server port>\n",argv[0]);
@@ -19,6 +20,35 @@ void logexit(const char *msg){
 }
 
 #define BUFSZ 1024
+
+struct client_data {
+    int csock;
+    struct sockaddr_storage storage;
+
+};
+
+void * client_thread(void *data) {
+    struct client_data *cdata = (struct client_data *)data;
+    struct sockaddr *caddr = (struct sockaddr *)(&cdata->storage);
+        
+    char caddrstr[BUFSZ];
+    addrtostr(caddr, caddrstr, BUFSZ);
+    printf("\nCliente conectado.\n");   
+    
+    //Primeira requisição
+    GameMessage request; 
+    request.type = MSG_REQUEST;
+    memset(&request, 0, sizeof(request));
+    char buf[BUFSZ];
+    memset(buf, 0, BUFSZ);
+    size_t count = recv(cdata->csock, &request, BUFSZ - 1, 0);
+
+    //Não deu tempo de implementar o restante da lógica, encerrando depois do teste de conexão.
+    printf("\nConexão bem-sucedida. Encerrando por aqui.\n");
+    
+    close(cdata->csock);
+    pthread_exit(EXIT_SUCCESS);
+}
 
 // função para verificar se a entrada é válida
 int mensagem_valida(int mensagem){
@@ -94,27 +124,22 @@ int main(int argc, char **argv){
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr =(struct sockaddr *)(&cstorage);
         socklen_t caddrlen = sizeof(cstorage);
-
         int csock = accept(var_socket, caddr, &caddrlen);
         if (csock == -1){
             logexit("accept");
         }
-        char caddrstr[BUFSZ];
-        addrtostr(caddr, caddrstr, BUFSZ);
-         printf("\nCliente conectado.\n");   
-        
-         //Primeira requisição
-        GameMessage request; 
-        request.type = MSG_REQUEST;
-        memset(&request, 0, sizeof(request));
-        char buf[BUFSZ];
-        memset(buf, 0, BUFSZ);
-        size_t count = recv(csock, &request, BUFSZ - 1, 0);
 
-        //Não deu tempo de implementar o restante da lógica, encerrando depois do teste de conexão.
-        printf("\nConexão bem-sucedida. Encerrando por aqui.\n");
-        close(csock);
-        exit(EXIT_SUCCESS);
+        struct client_data *cdata = malloc(sizeof(*cdata));
+        if (!cdata){
+            logexit("malloc");
+        }
+        cdata-> csock = csock;
+        memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_thread, cdata);
+        
     }
     exit(EXIT_SUCCESS);
 }
+
+

@@ -1,4 +1,4 @@
-#include "../include/common.h"
+#include "../include/comum.h"
 #include "../include/Mensagens.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -72,7 +72,7 @@ int main(int argc, char **argv){
         }
         total += count;
     }
-    close(var_socket);
+
 
     puts(buf);
 
