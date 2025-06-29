@@ -9,6 +9,14 @@
 #include <unistd.h>
 #include <pthread.h>
 
+//Váriavel gloal para armazenar o númeor de jogadores
+int N=0;
+
+//Criandofunções para  os logs:
+void log_start(int num){
+    printf("\nevent=start | id=* | N=%d \n",num);
+}
+
 void usage(int argc, char **argv){
     printf("usage: %s <server IP> <server port>\n",argv[0]);
     exit(EXIT_FAILURE);
@@ -24,28 +32,33 @@ void logexit(const char *msg){
 struct client_data {
     int csock;
     struct sockaddr_storage storage;
-
 };
 
 void * client_thread(void *data) {
     struct client_data *cdata = (struct client_data *)data;
     struct sockaddr *caddr = (struct sockaddr *)(&cdata->storage);
-        
+    
     char caddrstr[BUFSZ];
     addrtostr(caddr, caddrstr, BUFSZ);
-    printf("\nCliente conectado.\n");   
+    if (N==1){
+        log_start(N);
+    }
     
-    //Primeira requisição
-    GameMessage request; 
-    request.type = MSG_REQUEST;
-    memset(&request, 0, sizeof(request));
-    char buf[BUFSZ];
-    memset(buf, 0, BUFSZ);
-    size_t count = recv(cdata->csock, &request, BUFSZ - 1, 0);
+    //Envia mensegem inicial
+    struct aviator_msg start_msg;
+    memset(&start_msg, 0, sizeof(start_msg));
+    start_msg.value = 5; 
+    strcpy(start_msg.type,"start");
+    start_msg.player_id = N;
+    size_t envia_start = send(cdata->csock, &start_msg, sizeof(start_msg), 0);
+    
+    //Recebe a aposta
+    struct aviator_msg msg;
+    size_t recebe_aposta = recv(cdata->csock, &msg, sizeof(msg), 0);
+    printf("\nRodada aberta! Digite o valor da aposta ou digite [Q] para sair (%0.f segundos restantes): ",msg.value);
 
-    //Não deu tempo de implementar o restante da lógica, encerrando depois do teste de conexão.
-    printf("\nConexão bem-sucedida. Encerrando por aqui.\n");
-    
+
+
     close(cdata->csock);
     pthread_exit(EXIT_SUCCESS);
 }
@@ -55,34 +68,6 @@ int mensagem_valida(int mensagem){
     if (mensagem != 0 && mensagem!=1 && mensagem != 2 && mensagem!= 3 && mensagem!=4){
         return -1;
     }else{return 1;}
-}
-
-// para determinar quem ganhou a rodada
-int ganhador(int escolha_jogador){
-    int escolha_servidor = rand()%5;
-    if(escolha_jogador==escolha_servidor){
-        return -1;
-    }else if(escolha_jogador==0){
-        if(escolha_servidor==2 || escolha_servidor ==3){ 
-            return 1;
-        }else{return 0;}
-    }else if(escolha_jogador== 1){
-        if(escolha_servidor==0 || escolha_servidor ==4){ 
-            return 1;
-        }else{return 0;}
-    }else if(escolha_jogador== 2){
-        if(escolha_servidor==1 || escolha_servidor ==3){ 
-            return 1;
-        }else{return 0;}
-    }else if(escolha_jogador== 3){
-        if(escolha_servidor==1 || escolha_servidor ==4){ 
-            return 1;
-        }else{return 0;}
-    }else if(escolha_jogador== 4){
-        if(escolha_servidor==2 || escolha_servidor ==0){ 
-            return 1;
-        }else{return 0;}
-    }
 }
 
 
@@ -118,13 +103,16 @@ int main(int argc, char **argv){
 
     char addrstr[BUFSZ];
     addrtostr(addr, addrstr, BUFSZ);
-    printf("Servidor iniciado em modo %.5s na porta %s. Aguardando conexão... \n", addrstr,argv[2]);
 
     while(1){
         struct sockaddr_storage cstorage;
         struct sockaddr *caddr =(struct sockaddr *)(&cstorage);
         socklen_t caddrlen = sizeof(cstorage);
         int csock = accept(var_socket, caddr, &caddrlen);
+
+        N=N+1;
+
+
         if (csock == -1){
             logexit("accept");
         }
@@ -133,13 +121,12 @@ int main(int argc, char **argv){
         if (!cdata){
             logexit("malloc");
         }
+
         cdata-> csock = csock;
         memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
         pthread_t tid;
         pthread_create(&tid, NULL, client_thread, cdata);
-        
+       
     }
-    exit(EXIT_SUCCESS);
+
 }
-
-

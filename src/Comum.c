@@ -87,3 +87,14 @@ int server_sockaddr_init(const char *proto, const char *portstr, struct sockaddr
         return -1;
     }
 }
+
+int cronometro(int comecar){
+    if(comecar==1){
+        int tempo = 10;
+        while(tempo>0){
+            return tempo;
+            sleep(1);
+            tempo = tempo-1;
+        }
+    }
+}

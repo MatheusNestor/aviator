@@ -21,8 +21,13 @@ void logexit(const char *msg){
 #define BUFSZ 1024
 
 int main(int argc, char **argv){
-    if (argc < 3){
-        usage(argc,argv);
+    //Verificando erros na entrada
+    if (argc != 5){
+        printf("Error: Invalid number of arguments\n");
+    }else if(strcmp(argv[3],"-nick")!=0){
+        printf("Expected '-nick' argument\n");
+    }else if(strlen(argv[4])>13){
+        printf("Error: Nickname too long (max 13)\n");
     }
     
     struct sockaddr_storage storage;
@@ -33,7 +38,7 @@ int main(int argc, char **argv){
     
     int var_socket;
     var_socket = socket(storage.ss_family, SOCK_STREAM, 0);
-    if(socket == -1){
+    if(var_socket == -1){
         logexit("socket");
     }
 
@@ -46,35 +51,24 @@ int main(int argc, char **argv){
 
     char addrstr[BUFSZ];
     addrtostr(addr, addrstr, BUFSZ);
-
-    printf("\nConectado ao servidor.\n");
-    //Primeira resposta
-    GameMessage resposta; 
-    memset(&resposta, 0, sizeof(resposta));     
-    resposta.type = MSG_RESPONSE;
     
-    printf("\nEscolha sua jogada: \n\n0 - Nuclear Attack \n1 - Intercept Attack \n2 - Cyber Attack \n3 - Drone Strike \n4 - Bio Attack\n\n");
- 
-    char buf[BUFSZ];    
-    fgets(buf, BUFSZ-1,stdin);   
-    size_t count = send(var_socket, buf, strlen(buf)+1, 0);
-    if (count != strlen(buf)+1){
-        logexit("send");
-    }
+    //Mensagem inicial
+    struct aviator_msg msg;
+    size_t recebe_start = recv(var_socket, &msg, sizeof(msg), 0);
+    printf("\nRodada aberta! Digite o valor da aposta ou digite [Q] para sair (%0.f segundos restantes): ",msg.value);
+
+    //Envia aposta
+    struct aviator_msg bet_msg;  
+    memset(&bet_msg, 0, sizeof(bet_msg)); 
+    strcpy(bet_msg.type,"bet");
+    char buf[BUFSZ];
+    fgets(buf, BUFSZ-1,stdin);    
+    bet_msg.value = strtof(buf, NULL);
+
+    bet_msg.player_id = msg.player_id;
+    size_t envia_aposta = send(var_socket, &bet_msg, sizeof(bet_msg), 0);
 
 
-    memset(buf, 0, BUFSZ);
-    unsigned total = 0;
-    while(1){
-        count = recv(var_socket, buf + total, BUFSZ - total, 0);
-        if(count==0){
-            break;
-        }
-        total += count;
-    }
-
-
-    puts(buf);
 
     exit(EXIT_SUCCESS);
 }
