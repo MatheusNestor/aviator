@@ -10,13 +10,26 @@
 #include <pthread.h>
 #include <math.h>
 
+#define BUFSZ 1024
 
+//Max de jogadores
+#define PLAYER_MAX 10
+
+struct client_data {
+    int csock;
+    struct sockaddr_storage storage;
+};
 
 //Váriavel gloal para armazenar o númeor de jogadores
 int N=0;
+
 //Váriavel global para armazenar o valor que está sendo apostado
 float V=0;
 
+int jogadores_ativos[PLAYER_MAX];
+//Para controlar o máximo de jogadores:
+int contagem_jogadores = 0 ;
+pthread_mutex_t conta_jogadores = PTHREAD_MUTEX_INITIALIZER;
 
 //Criando funções para  os logs:
 void log_start(int num){
@@ -38,18 +51,34 @@ float m_e(int N,float V){
 int tempo_atual = 10 ;
 pthread_mutex_t cronometro = PTHREAD_MUTEX_INITIALIZER;
 
-void* cronometro_ativo(void* arg){
+
+void * cronometro_ativo(void* data){
     while(1){
         sleep(1);
         pthread_mutex_lock(&cronometro);
         if (tempo_atual>0){
             tempo_atual=tempo_atual-1;
         }
-        pthread_mutex_unlock(&cronometro);
         if (tempo_atual==0){
-            printf("Tempo acabou\n");
+
+
+            //Avisa que o tempo acabou
+            struct aviator_msg closed_msg;
+            memset(&closed_msg, 0, sizeof(closed_msg));
+            strcpy(closed_msg.type,"closed");
+            closed_msg.value=0;
+            pthread_mutex_lock(&conta_jogadores);
+            for (int i=0; i<contagem_jogadores;i++){
+                send(jogadores_ativos[i], &closed_msg, sizeof(closed_msg), 0);
+            }
+            pthread_mutex_unlock(&conta_jogadores);
+          
+            printf("\nevent=%s | id=* | N=%d | V=%.00f  \n",closed_msg.type,N,V);               
+
             break;
         }
+        pthread_mutex_unlock(&cronometro);
+        
     }
     return NULL;
 }
@@ -66,12 +95,6 @@ void logexit(const char *msg){
     exit(EXIT_FAILURE);
 }
 
-#define BUFSZ 1024
-
-struct client_data {
-    int csock;
-    struct sockaddr_storage storage;
-};
 
 void * client_thread(void *data) {
     struct client_data *cdata = (struct client_data *)data;
@@ -101,16 +124,14 @@ void * client_thread(void *data) {
     }
     V = msg.value+V;
     printf("\nevent=%s | id=%d | N=%d | V=%.00f  \n",msg.type,msg.player_id,N,V);
+    
+    //Pedido de Cashout
+    struct aviator_msg cash_msg;
+    size_t recebe_cash = recv(cdata->csock, &cash_msg, sizeof(cash_msg), 0);
+    printf("\nevent=%s | id=%d | N=%d | V=%.00f  \n",cash_msg.type,cash_msg.player_id,N,V);
 
-    pthread_mutex_lock(&cronometro);
-    if (tempo_atual==0){
-    //Avisa que o tempo acabou
-    struct aviator_msg closed_msg;
-    memset(&closed_msg, 0, sizeof(closed_msg));
-    strcpy(closed_msg.type,"closed");
-    size_t envia_closed = send(cdata->csock, &closed_msg, sizeof(closed_msg), 0);   
-    }
-    pthread_mutex_unlock(&cronometro);
+    //Envia multiplicador
+
 
     close(cdata->csock);
     pthread_exit(EXIT_SUCCESS);
@@ -163,12 +184,15 @@ int main(int argc, char **argv){
         socklen_t caddrlen = sizeof(cstorage);
         int csock = accept(var_socket, caddr, &caddrlen);
 
-        N=N+1;
-
-
         if (csock == -1){
             logexit("accept");
         }
+        
+        pthread_mutex_lock(&conta_jogadores);
+        jogadores_ativos[contagem_jogadores++] = csock;
+        N=N+1;        
+        pthread_mutex_unlock(&conta_jogadores);
+
 
         struct client_data *cdata = malloc(sizeof(*cdata));
         if (!cdata){
@@ -179,10 +203,11 @@ int main(int argc, char **argv){
         memcpy(&(cdata->storage), &cstorage, sizeof(cstorage));
         pthread_t tid;
         
+        if(N==1){
         pthread_create(&tid, NULL, cronometro_ativo, NULL);
+        }
 
-        pthread_create(&tid, NULL, client_thread, cdata);
- 
+        pthread_create(&tid, NULL, client_thread, cdata); 
     }
-
+    close(var_socket);
 }
